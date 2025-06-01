@@ -37,7 +37,7 @@ public class ViktorSoundModule: Module {
     private func playAudio(word: String,type:String, headers: [String: String]?) throws {
     
         guard !isPlaying else {
-            throw AudioError.alreadyPlaying
+            return
         }
 
         cleanup()
@@ -56,15 +56,17 @@ public class ViktorSoundModule: Module {
              }
 
         var request = URLRequest(url: audioUrl)
-        headers?.forEach { key, value in
-            request.setValue(value, forHTTPHeaderField: key)
+        if !isRetry{
+            headers?.forEach { key, value in
+                request.setValue(value, forHTTPHeaderField: key)
+            }
         }
 
         let semaphore = DispatchSemaphore(value: 0)
         var taskError: Error?
         var taskData: Data?
 
-        // 发起网络请求下载音频数据
+        // Initiate a network request to download audio data
         let task = urlSession.dataTask(with: request) { [weak self] data, _, error in
             guard let self else {
                 taskError = AudioError.moduleDeallocated
@@ -92,7 +94,8 @@ public class ViktorSoundModule: Module {
         semaphore.wait()
         currentTask = nil
 
-        // 错误处理
+        // Error handling
+        
         if let error = taskError {
             isPlaying = false
             throw error
@@ -104,10 +107,12 @@ public class ViktorSoundModule: Module {
             throw AudioError.noData
         }
         
+        
         if !isMP3Format(data:data) && !isRetry {
             try tryPlayAudio(word: word,type: type, headers: headers, isRetry: true)
             return
         }
+        
         
 
         // 播放音频
@@ -116,9 +121,11 @@ public class ViktorSoundModule: Module {
             audioDelegate = AudioPlayerDelegate { [weak self] in
                 self?.cleanup()
             }
+            
             audioPlayer?.delegate = audioDelegate
             audioPlayer?.play()
         } catch {
+        
             if !isRetry {
                 try tryPlayAudio(word: word,type: type, headers: headers, isRetry: true)
                 return
@@ -135,14 +142,8 @@ public class ViktorSoundModule: Module {
         let header = data.prefix(4)
         let bytes = Array(header)
         
-        // MP3 文件头
-        if bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0 {
-            return true // MP3
-        }
-        
-        // WAV 文件头 "RIFF"
-        if bytes == [0x52, 0x49, 0x46, 0x46] {
-            return true // WAV
+        if bytes == [0x49, 0x44, 0x33, 0x04] {
+            return true // Correct File
         }
 
         return false
