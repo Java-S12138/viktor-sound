@@ -21,7 +21,7 @@ public class ViktorSoundModule: Module {
         // 模块创建时初始化网络会话配置
         OnCreate {
             let config = URLSessionConfiguration.default
-            config.timeoutIntervalForRequest = 3 // 超时3秒
+            config.timeoutIntervalForRequest = 2 // 超时2秒
             config.requestCachePolicy = .reloadIgnoringLocalCacheData
             self.urlSession = URLSession(configuration: config)
         }
@@ -34,15 +34,14 @@ public class ViktorSoundModule: Module {
     }
 
     // 播放音频主函数，检查 URL 与播放状态
-    private func playAudio(word: String,type:String, headers: [String: String]?) throws {
-    
-        guard !isPlaying else {
-            return
+    private func playAudio(word: String, type: String, headers: [String: String]?) throws {
+        // 如果正在播放，先停止当前播放
+        if isPlaying {
+            cleanup()
         }
-
-        cleanup()
+        
         isPlaying = true
-        try tryPlayAudio(word: word,type:type, headers: headers, isRetry: false)
+        try tryPlayAudio(word: word, type: type, headers: headers, isRetry: false)
     }
 
     // 尝试播放音频（可重试一次）
