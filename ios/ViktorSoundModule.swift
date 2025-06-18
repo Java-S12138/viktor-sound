@@ -12,6 +12,7 @@ public class ViktorSoundModule: Module {
     // 模块初始化方法（必须实现）
     public required init(appContext: AppContext) {
         super.init(appContext: appContext)
+        configureAudioSession()
     }
 
     // 模块定义
@@ -32,9 +33,29 @@ public class ViktorSoundModule: Module {
             try self.playAudio(word: word,type:type,headers: headers)
         }
     }
+    
+    // 配置音频会话以支持静音模式播放
+    private func configureAudioSession() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            
+            // 设置音频会话类别为 playback，这样可以在静音模式下播放
+            // .playback 类别会忽略静音开关，强制播放音频
+            try audioSession.setCategory(.playback, mode: .default, options: [])
+            
+            // 激活音频会话
+            try audioSession.setActive(true)
+            
+        } catch {
+            print("Failed to configure audio session: \(error.localizedDescription)")
+        }
+    }
 
     // 播放音频主函数，检查 URL 与播放状态
     private func playAudio(word: String, type: String, headers: [String: String]?) throws {
+        // 确保音频会话处于活跃状态
+        try activateAudioSession()
+        
         // 如果正在播放，先停止当前播放
         if isPlaying {
             cleanup()
@@ -42,6 +63,16 @@ public class ViktorSoundModule: Module {
         
         isPlaying = true
         try tryPlayAudio(word: word, type: type, headers: headers, isRetry: false)
+    }
+    
+    // 激活音频会话
+    private func activateAudioSession() throws {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setActive(true)
+        } catch {
+            throw AudioError.audioSessionFailed(error.localizedDescription)
+        }
     }
 
     // 尝试播放音频（可重试一次）
@@ -94,7 +125,6 @@ public class ViktorSoundModule: Module {
         currentTask = nil
 
         // Error handling
-        
         if let error = taskError {
             isPlaying = false
             throw error
@@ -106,13 +136,10 @@ public class ViktorSoundModule: Module {
             throw AudioError.noData
         }
         
-        
         if !isMP3Format(data:data) && !isRetry {
             try tryPlayAudio(word: word,type: type, headers: headers, isRetry: true)
             return
         }
-        
-        
 
         // 播放音频
         do {
@@ -124,7 +151,6 @@ public class ViktorSoundModule: Module {
             audioPlayer?.delegate = audioDelegate
             audioPlayer?.play()
         } catch {
-        
             if !isRetry {
                 try tryPlayAudio(word: word,type: type, headers: headers, isRetry: true)
                 return
@@ -187,6 +213,7 @@ private enum AudioError: Error {
     case noData
     case moduleDeallocated
     case fallbackFailed(String)
+    case audioSessionFailed(String)
 
     // 错误码
     var code: String {
@@ -199,6 +226,7 @@ private enum AudioError: Error {
         case .noData: return "NO_DATA"
         case .moduleDeallocated: return "INTERNAL_ERROR"
         case .fallbackFailed: return "FALLBACK_FAILED"
+        case .audioSessionFailed: return "AUDIO_SESSION_ERROR"
         }
     }
 
@@ -213,6 +241,7 @@ private enum AudioError: Error {
         case .noData: return "No data received"
         case .moduleDeallocated: return "Module deallocated"
         case .fallbackFailed(let msg): return msg
+        case .audioSessionFailed(let msg): return "Audio session error: \(msg)"
         }
     }
 }
